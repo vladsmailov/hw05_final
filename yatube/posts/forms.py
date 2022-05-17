@@ -13,6 +13,7 @@ class PostForm(forms.ModelForm):
             'group': 'Группа к которой ближе лежит пост'
         }
 
+
 class CommentForm(forms.ModelForm):
 
     class Meta:

@@ -7,8 +7,8 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..forms import PostForm, Comment
-from ..models import Post, Group
+from ..forms import CommentForm, PostForm
+from ..models import Comment, Group, Post
 
 User = get_user_model()
 
@@ -32,19 +32,20 @@ class PostCreateFormTests(TestCase):
             group=cls.group
         )
         cls.form = PostForm()
-        cls.small_gif = (            
-             b'\x47\x49\x46\x38\x39\x61\x02\x00'
-             b'\x01\x00\x80\x00\x00\x00\x00\x00'
-             b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
-             b'\x00\x00\x00\x2C\x00\x00\x00\x00'
-             b'\x02\x00\x01\x00\x00\x02\x02\x0C'
-             b'\x0A\x00\x3B'
+        cls.small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x02\x00'
+            b'\x01\x00\x80\x00\x00\x00\x00\x00'
+            b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
+            b'\x00\x00\x00\x2C\x00\x00\x00\x00'
+            b'\x02\x00\x01\x00\x00\x02\x02\x0C'
+            b'\x0A\x00\x3B'
         )
         cls.uploaded = SimpleUploadedFile(
             name='small.gif',
             content=cls.small_gif,
             content_type='image/gif'
         )
+
     @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
@@ -64,7 +65,7 @@ class PostCreateFormTests(TestCase):
         form_data = {
             'text': 'Тестовый пост',
             'group': self.group.id,
-            'image': self.uploaded
+            'image': self.uploaded.name
         }
         response = self.guest_client.post(
             reverse('posts:post_create'),
@@ -78,7 +79,7 @@ class PostCreateFormTests(TestCase):
             Post.objects.filter(
                 group__id=form_data['group'],
                 text=form_data['text'],
-                image=form_data['image']
+                image='posts/small.gif'
             ).exists()
         )
         self.assertEqual(Post.objects.count(), posts_count)
@@ -107,7 +108,7 @@ class PostCreateFormTests(TestCase):
                 author=self.user,
                 group__id=form_data['group'],
                 text=form_data['text'],
-                # image=form_data['image']
+                image='posts/small.gif'
             ).exists()
         )
 
@@ -134,4 +135,37 @@ class PostCreateFormTests(TestCase):
                 group__id=form_data['group'],
                 text=form_data['text'],
             ).exists()
+        )
+
+
+class CommentFormTests(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = User.objects.create_user(username='UnnamedAuthor')
+        cls.authorized_client = Client()
+        cls.authorized_client.force_login(cls.user)
+        cls.post = Post.objects.create(
+            text='Тестовый пост на 100500 символов',
+            author=cls.user,
+        )
+        cls.form = CommentForm()
+
+    def test_comment_create_authorisated_user(self):
+        """Проверка создания комментария"""
+        post_comment_count = Comment.objects.count()
+        form_data = {
+            'text': 'Автор пиши еще!',
+        }
+        response = self.authorized_client.post(
+            reverse('posts:add_comment', kwargs={'post_id': self.post.id}),
+            data=form_data,
+            follow=True
+        )
+        self.assertEqual(Comment.objects.count(), post_comment_count + 1)
+        self.assertRedirects(response, reverse(
+            'posts:post_detail',
+            kwargs={'post_id': self.post.id}
+        )
         )
