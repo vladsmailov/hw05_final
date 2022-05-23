@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..forms import CommentForm, PostForm
+from ..forms import CommentForm
 from ..models import Comment, Group, Post
 
 User = get_user_model()
@@ -29,9 +29,8 @@ class PostCreateFormTests(TestCase):
         cls.post = Post.objects.create(
             author=cls.user,
             text='Тестовый пост на 100500 символов',
-            group=cls.group
+            group=cls.group,
         )
-        cls.form = PostForm()
         cls.small_gif = (
             b'\x47\x49\x46\x38\x39\x61\x02\x00'
             b'\x01\x00\x80\x00\x00\x00\x00\x00'
@@ -40,7 +39,12 @@ class PostCreateFormTests(TestCase):
             b'\x02\x00\x01\x00\x00\x02\x02\x0C'
             b'\x0A\x00\x3B'
         )
-        cls.uploaded = SimpleUploadedFile(
+
+    @classmethod
+    def get_uploaded(cls):
+        # SimpleUploadedFile - это одноразовый файлик,
+        #  который при повторном прочтении будет пустой
+        return SimpleUploadedFile(
             name='small.gif',
             content=cls.small_gif,
             content_type='image/gif'
@@ -65,11 +69,12 @@ class PostCreateFormTests(TestCase):
         form_data = {
             'text': 'Тестовый пост',
             'group': self.group.id,
-            'image': self.uploaded.name
-        }
+            'image': self.get_uploaded()
+        }  # next test failed on change THIS. why
         response = self.guest_client.post(
             reverse('posts:post_create'),
-            data=form_data
+            data=form_data,
+            follow=True
         )
         self.assertRedirects(response,
                              f'{reverse("users:login")}'
@@ -79,7 +84,7 @@ class PostCreateFormTests(TestCase):
             Post.objects.filter(
                 group__id=form_data['group'],
                 text=form_data['text'],
-                image='posts/small.gif'
+                # image='posts/small.gif'
             ).exists()
         )
         self.assertEqual(Post.objects.count(), posts_count)
@@ -90,8 +95,8 @@ class PostCreateFormTests(TestCase):
         form_data = {
             'text': 'Тестовый пост',
             'group': self.group.id,
-            'image': self.uploaded
-        }
+            'image': self.get_uploaded()
+        }  # invalid form. why?
         response = self.authorized_client.post(
             reverse('posts:post_create'),
             data=form_data,

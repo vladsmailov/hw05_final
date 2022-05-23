@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import Client, TestCase
 from django.urls import reverse
 
@@ -26,6 +27,7 @@ class URLTests(TestCase):
         )
 
     def setUp(self):
+        cache.clear()
         self.guest_client = Client()
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user_not_the_author)
@@ -50,6 +52,8 @@ class URLTests(TestCase):
             f'/posts/{self.post.id}/edit/': reverse(
                 'posts:post_edit', kwargs={'post_id': self.post.id}
             ),
+            '/follow/': reverse('posts:follow_index'),
+
         }
         for url, name in tested_urls.items():
             with self.subTest(name=name):
@@ -68,6 +72,7 @@ class URLTests(TestCase):
             (reverse('posts:index'), 200, False),
             (reverse('posts:post_detail', kwargs={'post_id': 0}), 404, False),
             (reverse('posts:post_create'), 200, True),
+            (reverse('posts:follow_index'), 302, False),
         )
         for url, expected_status, bool_flag in names:
             if not bool_flag:
@@ -108,6 +113,7 @@ class URLTests(TestCase):
                 kwargs={'post_id': self.post.id}
             ),
             'posts/create_post.html': reverse('posts:post_create'),
+            'posts/follow.html': reverse('posts:follow_index'),
         }
         for template, url in tested_urls.items():
             with self.subTest(url=url):

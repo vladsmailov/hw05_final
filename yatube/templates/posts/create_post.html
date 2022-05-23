@@ -15,7 +15,9 @@
           Новый пост
           {% endif %}            
       </div>
-      <div class="card-body">        
+      <div class="card-body">
+      {% comment %} {% include 'includes/form_error_decoder.html' %} ###Оставить для будущих тестов
+      </div> {% endcomment %}
         <form method="post"
         enctype="multipart/form-data"
         action=

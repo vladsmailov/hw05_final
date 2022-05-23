@@ -35,8 +35,9 @@ class ViewTests(TestCase):
             (reverse('posts:group_list',
              kwargs={'slug': cls.group.slug})),
             (reverse('posts:profile', kwargs={'username': cls.user})),
+            (reverse('posts:follow_index'))
         )
-        cls.small_gif = (
+        small_gif = (
             b'\x47\x49\x46\x38\x39\x61\x02\x00'
             b'\x01\x00\x80\x00\x00\x00\x00\x00'
             b'\xFF\xFF\xFF\x21\xF9\x04\x00\x00'
@@ -46,7 +47,7 @@ class ViewTests(TestCase):
         )
         cls.uploaded = SimpleUploadedFile(
             name='small.gif',
-            content=cls.small_gif,
+            content=small_gif,
             content_type='image/gif'
         )
         cls.post = Post.objects.create(
@@ -64,10 +65,12 @@ class ViewTests(TestCase):
     def setUp(self):
         self.guest_client = Client()
         self.authorized_client = Client()
-        self.authorized_client.force_login(self.user)
+        self.authorized_client.force_login(self.follower)
+        cache.clear()
 
     def test_paginator(self):
         """Проверка паджинатора"""
+        self.authorized_client.force_login(self.user)
         Post.objects.bulk_create([Post(
             author=self.user,
             text='Пост на 100500 символов',
@@ -78,6 +81,12 @@ class ViewTests(TestCase):
         total_number_of_pages = math.ceil(
             total_number_of_posts / settings.SORTING_VALUE)
         posts_per_page = []
+        self.authorized_client.force_login(self.follower)
+        self.authorized_client.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': self.user.username}
+        )
+        )
         for page in range(total_number_of_pages + 1):
             if total_number_of_posts >= settings.SORTING_VALUE:
                 posts_per_page = [(page, settings.SORTING_VALUE)]
@@ -87,7 +96,7 @@ class ViewTests(TestCase):
         for url in self.urls:
             for page, count in posts_per_page:
                 with self.subTest(url=url):
-                    response = self.guest_client.get(url, {'page': page})
+                    response = self.authorized_client.get(url, {'page': page})
                     self.assertEqual(len(
                         response.context['page_obj']),
                         count
@@ -95,9 +104,14 @@ class ViewTests(TestCase):
 
     def test_context_for_index_group_list_profile(self):
         """Проверка контекста страниц index, group_list, profile"""
+        self.authorized_client.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': self.user.username}
+        )
+        )
         for url in self.urls:
             with self.subTest(url=url):
-                response = self.guest_client.get(url)
+                response = self.authorized_client.get(url)
                 self.assertIn(self.post, response.context.get('page_obj'))
 
     def test_context_for_post_detail(self):
@@ -117,7 +131,7 @@ class ViewTests(TestCase):
 
     def test_context_for_post_edit(self):
         """Проверка контекста на странице edit"""
-
+        self.authorized_client.force_login(self.user)
         response = self.authorized_client.get(reverse(
             'posts:post_edit', args={self.post.id}))
         self.assertIsInstance(response.context['form'], PostForm)
@@ -125,15 +139,16 @@ class ViewTests(TestCase):
 
     def test_cache(self):
         """Тест кэша страницы index"""
-        response_1 = self.authorized_client.get(reverse("posts:index"))
+        response_1 = self.guest_client.get(reverse("posts:index"))
         Post.objects.get(pk=self.post.pk).delete()
-        response_2 = self.authorized_client.get(reverse("posts:index"))
+        response_2 = self.guest_client.get(reverse("posts:index"))
         self.assertEqual(response_1.content, response_2.content)
         cache.clear()
+        response_3 = self.guest_client.get(reverse("posts:index"))
+        self.assertNotEqual(response_2.content, response_3.content)
 
     def test_follow(self):
         """Тест подписки на автора"""
-        self.authorized_client.force_login(self.follower)
         self.authorized_client.get(reverse(
             'posts:profile_follow',
             kwargs={'username': self.user.username}
@@ -144,11 +159,17 @@ class ViewTests(TestCase):
             author=self.user.id
         )
         )
+
+    def test_unfollow(self):
+        """Тест отписки от автора"""
+        self.authorized_client.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': self.user.username}
+        ))
         self.authorized_client.get(reverse(
             'posts:profile_unfollow',
             kwargs={'username': self.user.username}
-        )
-        )
+        ))
         self.assertFalse(Follow.objects.filter(
             user=self.follower,
             author=self.user.id
@@ -157,14 +178,11 @@ class ViewTests(TestCase):
 
     def test_new_posts_for_subscribers(self):
         """Тест появления новых постов у подписчиков"""
-        self.authorized_client.force_login(self.follower)
         self.authorized_client.get(reverse(
             'posts:profile_follow',
             kwargs={'username': self.user.username}
         )
         )
-        response = self.authorized_client.get(reverse('posts:follow_index'))
-        self.assertIn(self.post, response.context.get('page_obj'))
         self.authorized_client.get(reverse(
             'posts:profile_unfollow',
             kwargs={'username': self.user.username}
