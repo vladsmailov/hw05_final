@@ -7,8 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 
-from ..forms import CommentForm
-from ..models import Comment, Group, Post
+from ..models import Group, Post
 
 User = get_user_model()
 
@@ -41,16 +40,6 @@ class PostCreateFormTests(TestCase):
         )
 
     @classmethod
-    def get_uploaded(cls):
-        # SimpleUploadedFile - это одноразовый файлик,
-        #  который при повторном прочтении будет пустой
-        return SimpleUploadedFile(
-            name='small.gif',
-            content=cls.small_gif,
-            content_type='image/gif'
-        )
-
-    @classmethod
     def tearDownClass(cls):
         super().tearDownClass()
         shutil.rmtree(TEMP_MEDIA_ROOT, ignore_errors=True)
@@ -59,6 +48,11 @@ class PostCreateFormTests(TestCase):
         self.guest_client = Client()
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
+        self.uploaded = SimpleUploadedFile(
+            name='small.gif',
+            content=self.small_gif,
+            content_type='image/gif'
+        )
 
     def test_guest_post_create(self):
         """
@@ -69,8 +63,8 @@ class PostCreateFormTests(TestCase):
         form_data = {
             'text': 'Тестовый пост',
             'group': self.group.id,
-            'image': self.get_uploaded()
-        }  # next test failed on change THIS. why
+            'image': self.uploaded
+        }
         response = self.guest_client.post(
             reverse('posts:post_create'),
             data=form_data,
@@ -84,7 +78,6 @@ class PostCreateFormTests(TestCase):
             Post.objects.filter(
                 group__id=form_data['group'],
                 text=form_data['text'],
-                # image='posts/small.gif'
             ).exists()
         )
         self.assertEqual(Post.objects.count(), posts_count)
@@ -95,8 +88,8 @@ class PostCreateFormTests(TestCase):
         form_data = {
             'text': 'Тестовый пост',
             'group': self.group.id,
-            'image': self.get_uploaded()
-        }  # invalid form. why?
+            'image': self.uploaded
+        }
         response = self.authorized_client.post(
             reverse('posts:post_create'),
             data=form_data,
@@ -140,37 +133,4 @@ class PostCreateFormTests(TestCase):
                 group__id=form_data['group'],
                 text=form_data['text'],
             ).exists()
-        )
-
-
-class CommentFormTests(TestCase):
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.user = User.objects.create_user(username='UnnamedAuthor')
-        cls.authorized_client = Client()
-        cls.authorized_client.force_login(cls.user)
-        cls.post = Post.objects.create(
-            text='Тестовый пост на 100500 символов',
-            author=cls.user,
-        )
-        cls.form = CommentForm()
-
-    def test_comment_create_authorisated_user(self):
-        """Проверка создания комментария"""
-        post_comment_count = Comment.objects.count()
-        form_data = {
-            'text': 'Автор пиши еще!',
-        }
-        response = self.authorized_client.post(
-            reverse('posts:add_comment', kwargs={'post_id': self.post.id}),
-            data=form_data,
-            follow=True
-        )
-        self.assertEqual(Comment.objects.count(), post_comment_count + 1)
-        self.assertRedirects(response, reverse(
-            'posts:post_detail',
-            kwargs={'post_id': self.post.id}
-        )
         )

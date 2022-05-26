@@ -26,7 +26,7 @@ class CommentFormTests(TestCase):
 
     def test_comment_create_authorisated_user(self):
         """Проверка создания комментария"""
-        post_comment_count = Comment.objects.count()
+        comment_count = Comment.objects.count()
         form_data = {
             'text': 'Автор пиши еще!',
         }
@@ -35,15 +35,18 @@ class CommentFormTests(TestCase):
             data=form_data,
             follow=True
         )
-        self.assertEqual(Comment.objects.count(), post_comment_count + 1)
+        self.assertEqual(Comment.objects.count(), comment_count + 1)
         self.assertRedirects(response, reverse(
             'posts:post_detail',
             kwargs={'post_id': self.post.id}
         )
         )
+        self.assertTrue(Comment.objects.filter(
+            text=form_data['text']).exists()
+        )
 
-    def test_comment_has_corresponding_text(self):
-        """Комментарий имеет соответствующий текст"""
+    def test_has_correct_connection(self):
+        """Комментарий прикреплен к соответствующему посту"""
         form_data = {
             'text': 'Автор пиши еще!',
         }
@@ -52,17 +55,8 @@ class CommentFormTests(TestCase):
             data=form_data,
             follow=True
         )
-        self.assertTrue(Comment.objects.filter(
-            text=form_data['text']))
-
-    def test_has_correct_connection(self):
-        """Комментарий прикреплен к соответствующему посту"""
-        form_data = {
-            'text': 'Автор пиши еще!',
-        }
-        response = self.authorized_client.post(
-            reverse('posts:add_comment', kwargs={'post_id': self.post.id}),
-            data=form_data,
-            follow=True
+        self.assertTrue(
+            Comment.objects.filter(
+                id=self.post.id,
+            ).exists()
         )
-        self.assertEqual(self.post.id, response.context.get('comments')[0].id)

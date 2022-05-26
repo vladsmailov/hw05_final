@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db import models
-from django.db.models import UniqueConstraint, CheckConstraint, Q, F
+from django.db.models import CheckConstraint, F, Q, UniqueConstraint
 
 User = get_user_model()
 
@@ -39,8 +39,8 @@ class Post(models.Model):
         related_name="posts",
     )
     image = models.ImageField(
-        'Картинка',
-        upload_to='posts/',
+        "Картинка",
+        upload_to="posts/",
         blank=True
     )
 
@@ -64,7 +64,7 @@ class Comment(models.Model):
         on_delete=models.CASCADE,
         related_name="comments"
     )
-    text = models.TextField('Текст', help_text='Текст нового комментария')
+    text = models.TextField("Текст", help_text="Текст нового комментария")
     created = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -88,7 +88,7 @@ class Follow(models.Model):
 
     class Meta:
         constraints = [
-            UniqueConstraint(fields=['user', 'author'],
+            UniqueConstraint(fields=["user", "author"],
                              name="unique_relationships"),
             CheckConstraint(check=~Q(user=F("author")),
                             name="prevent_self_follow"),

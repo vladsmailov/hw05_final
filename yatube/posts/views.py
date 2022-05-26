@@ -1,32 +1,28 @@
 import logging
+
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.db.models import Prefetch
 
 from .forms import CommentForm, PostForm
-from .models import Follow, Group, Post, User
-
+from .models import Follow, Group, Post, User, Comment
 
 logger = logging.getLogger(__name__)
 
 
-def page_paginator(request, post_list):
+def page_paginator(post_list, page_number):
     paginator = Paginator(post_list, settings.SORTING_VALUE)
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-    return {
-        'paginator': paginator,
-        'page_number': page_number,
-        'page_obj': page_obj
-    }
+    return paginator.get_page(page_number)
 
 
 def index(request):
     post_list = Post.objects.select_related("author", "group")
+    page_number = request.GET.get("page")
     context = {
         "title": "Последнее обновление на сайте",
-        "page_obj": page_paginator(request, post_list)['page_obj'],
+        "page_obj": page_paginator(post_list, page_number),
     }
     return render(request, "posts/index.html", context)
 
@@ -34,9 +30,10 @@ def index(request):
 def group_posts(request, slug):
     group = get_object_or_404(Group, slug=slug)
     post_list = group.posts.select_related("author")
+    page_number = request.GET.get("page")
     context = {
         "group": group,
-        "page_obj": page_paginator(request, post_list)['page_obj'],
+        "page_obj": page_paginator(post_list, page_number),
     }
 
     return render(request, "posts/group_list.html", context)
@@ -45,13 +42,15 @@ def group_posts(request, slug):
 def profile(request, username):
     author = get_object_or_404(User, username=username)
     post_list = author.posts.select_related("group")
+    page_number = request.GET.get("page")
+    page_obj = page_paginator(post_list, page_number)
     following = (request.user.is_authenticated
-                 and author.following.filter(author=author).exists())
+                 and author.following.filter(user=request.user).exists())
     context = {
         "author": author,
         "title": f"Профайл пользователя {username}",
-        "page_obj": page_paginator(request, post_list)['page_obj'],
-        "post_count": page_paginator(request, post_list)['paginator'].count,
+        "page_obj": page_obj,
+        "post_count": page_obj.paginator.count,
         "following": following,
     }
 
@@ -72,18 +71,18 @@ def add_comment(request, post_id):
 
 def post_detail(request, post_id):
     post = get_object_or_404(
-        Post.objects.select_related("author", "group"),
+        Post.objects.select_related("author", "group").prefetch_related(
+            Prefetch("comments",
+                     queryset=Comment.objects.select_related("author"))
+        ),
         pk=post_id
     )
     post_count = post.author.posts.count()
-    form = CommentForm()
-    comments = Post.objects.prefetch_related("author").all()
     context = {
         "post": post,
-        "group": post.group,
         "post_count": post_count,
-        "form": form,
-        "comments": comments,
+        "form": CommentForm(),
+        "comments": post.comments.all,
     }
     return render(request, "posts/post_detail.html", context)
 
@@ -97,7 +96,6 @@ def post_create(request):
         post.save()
         return redirect("posts:profile", username=request.user.username)
     context = {"form": form, "title": "Создание"}
-    print(form.errors.as_json())
     return render(
         request,
         "posts/create_post.html",
@@ -127,8 +125,9 @@ def post_edit(request, post_id):
 
 @login_required
 def follow_index(request):
-    post_list = Post.objects.filter(author__following__user=request.user.id)
-    context = {'page_obj': page_paginator(request, post_list)['page_obj']}
+    post_list = Post.objects.filter(author__following__user=request.user)
+    page_number = request.GET.get("page")
+    context = {'page_obj': page_paginator(post_list, page_number)}
     return render(request, 'posts/follow.html', context)
 
 
