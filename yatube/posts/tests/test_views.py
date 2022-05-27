@@ -29,6 +29,7 @@ class ViewTests(TestCase):
             slug='test-slug',
             description='Тестовое описание',
         )
+        Follow.objects.create(user=cls.follower, author=cls.user)
         cls.COUNT = 12
         cls.urls = (
             (reverse('posts:index')),
@@ -82,11 +83,6 @@ class ViewTests(TestCase):
             total_number_of_posts / settings.SORTING_VALUE)
         posts_per_page = []
         self.authorized_client.force_login(self.follower)
-        self.authorized_client.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.user.username}
-        )
-        )
         for page in range(total_number_of_pages + 1):
             if total_number_of_posts >= settings.SORTING_VALUE:
                 posts_per_page = [(page, settings.SORTING_VALUE)]
@@ -104,11 +100,6 @@ class ViewTests(TestCase):
 
     def test_context_for_index_group_list_profile(self):
         """Проверка контекста страниц index, group_list, profile"""
-        self.authorized_client.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.user.username}
-        )
-        )
         for url in self.urls:
             with self.subTest(url=url):
                 response = self.authorized_client.get(url)
@@ -147,13 +138,18 @@ class ViewTests(TestCase):
         response_3 = self.guest_client.get(reverse("posts:index"))
         self.assertNotEqual(response_2.content, response_3.content)
 
-    def test_follow(self):
-        """Тест подписки на автора"""
+    def test_new_posts_for_subscribers(self):
+        """Тест появления новых постов у подписчиков"""
         self.authorized_client.get(reverse(
-            'posts:profile_follow',
+            'posts:profile_unfollow',
             kwargs={'username': self.user.username}
         )
         )
+        response = self.authorized_client.get(reverse('posts:follow_index'))
+        self.assertNotIn(self.post, response.context.get('page_obj'))
+
+    def test_follow(self):
+        """Тест подписки на автора"""
         self.assertTrue(Follow.objects.get(
             user=self.follower,
             author=self.user.id
@@ -175,18 +171,3 @@ class ViewTests(TestCase):
             author=self.user.id
         ).exists()
         )
-
-    def test_new_posts_for_subscribers(self):
-        """Тест появления новых постов у подписчиков"""
-        self.authorized_client.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.user.username}
-        )
-        )
-        self.authorized_client.get(reverse(
-            'posts:profile_unfollow',
-            kwargs={'username': self.user.username}
-        )
-        )
-        response = self.authorized_client.get(reverse('posts:follow_index'))
-        self.assertNotIn(self.post, response.context.get('page_obj'))

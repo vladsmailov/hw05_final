@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from ..forms import CommentForm
 from ..models import Comment, Post
 
 User = get_user_model()
@@ -18,14 +17,44 @@ class CommentFormTests(TestCase):
             text='Тестовый пост на 100500 символов',
             author=cls.user,
         )
-        cls.form = CommentForm()
 
     def setUp(self):
+        self.guest_client = Client()
         self.authorized_client = Client()
         self.authorized_client.force_login(self.user)
 
+    def test_guest_comment_create(self):
+        """
+        Тестирование отправки валидной
+        формы неавторизованным пользователем
+        """
+        comment_url = reverse("posts:add_comment", args={self.post.id})
+        comment_count = Comment.objects.count()
+        form_data = {
+            'text': 'Тестовый коммент',
+        }
+        response = self.guest_client.post(
+            reverse('posts:add_comment', args={self.post.id}),
+            data=form_data,
+            follow=True
+        )
+        self.assertRedirects(response,
+                             f'{reverse("users:login")}?next={comment_url}'
+                             )
+        self.assertFalse(
+            Comment.objects.filter(
+                text=form_data['text'],
+            ).exists()
+        )
+        self.assertEqual(Comment.objects.count(), comment_count)
+
     def test_comment_create_authorisated_user(self):
-        """Проверка создания комментария"""
+        """
+        Проверка создания комментария,
+        соответствия авторства комментария,
+        прикрепления комментария к
+        соответствующему посту
+        """
         comment_count = Comment.objects.count()
         form_data = {
             'text': 'Автор пиши еще!',
@@ -42,21 +71,8 @@ class CommentFormTests(TestCase):
         )
         )
         self.assertTrue(Comment.objects.filter(
-            text=form_data['text']).exists()
-        )
-
-    def test_has_correct_connection(self):
-        """Комментарий прикреплен к соответствующему посту"""
-        form_data = {
-            'text': 'Автор пиши еще!',
-        }
-        self.authorized_client.post(
-            reverse('posts:add_comment', kwargs={'post_id': self.post.id}),
-            data=form_data,
-            follow=True
-        )
-        self.assertTrue(
-            Comment.objects.filter(
-                id=self.post.id,
-            ).exists()
+            text=form_data['text'],
+            author=self.user,
+            id=self.post.id,
+        ).exists()
         )
