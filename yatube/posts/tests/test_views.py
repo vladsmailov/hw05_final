@@ -159,10 +159,6 @@ class ViewTests(TestCase):
     def test_unfollow(self):
         """Тест отписки от автора"""
         self.authorized_client.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.user.username}
-        ))
-        self.authorized_client.get(reverse(
             'posts:profile_unfollow',
             kwargs={'username': self.user.username}
         ))
